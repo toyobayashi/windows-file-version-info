@@ -1,0 +1,20 @@
+{
+  "name": "@tybys/windows-file-version-info",
+  "version": "1.0.0",
+  "description": "C# FileVersionInfo class",
+  "main": "index.js",
+  "typings": "index.d.ts",
+  "scripts": {
+    "build": "node-gyp rebuild"
+  },
+  "keywords": [],
+  "author": "toyobayashi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/toyobayashi/windows-file-version-info.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}
