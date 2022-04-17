@@ -1,3 +1,6 @@
+'use strict'
+Object.defineProperty(exports, '__esModule', { value: true })
+
 const { EOL } = require('os')
 const { existsSync } = require('fs')
 const mod = require('./dist/fvi.node')
@@ -76,4 +79,4 @@ Object.defineProperty(FileVersionInfo.prototype, 'toJSON', {
   }
 })
 
-module.exports = mod
+exports.FileVersionInfo = FileVersionInfo
