@@ -17,6 +17,20 @@ typedef struct {
   uint16_t wCodePage;
 } translation_s;
 
+static const char* errmsgs[] = {
+  "",
+  "Invalid fvi_t",
+  "Invalid argument",
+  "VS_FIXEDFILEINFO is NULL",
+  "translation_s is NULL",
+  "Windows API Error",
+  "Unsupport platform",
+};
+
+const char* fvi_err(fvi_result code) {
+  return errmsgs[code];
+}
+
 #ifdef _WIN32
 
 #define FVI_LOWORD(i32) ((uint16_t)((i32) & 0xFFFF))
@@ -51,20 +65,6 @@ static const WCHAR* string_file_info_keys[] = {
   L"\\StringFileInfo\\%04x%04x\\ProductVersion",
   L"\\StringFileInfo\\%04x%04x\\SpecialBuild"
 };
-
-static const char* errmsgs[] = {
-  "",
-  "Invalid fvi_t",
-  "Invalid argument",
-  "VS_FIXEDFILEINFO is NULL",
-  "translation_s is NULL",
-  "Windows API Error",
-  "Unsupport platform",
-};
-
-const char* fvi_err(fvi_result code) {
-  return errmsgs[code];
-}
 
 fvi_t fvi_init(const uint16_t* file_name) {
   fvi_t info =
