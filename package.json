@@ -1,6 +1,6 @@
 {
   "name": "@tybys/windows-file-version-info",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "C# FileVersionInfo class",
   "main": "index.js",
   "typings": "index.d.ts",

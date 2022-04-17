@@ -50,6 +50,8 @@ typedef struct fvi fvi_s;
 #define FVI_LOWORD(i32) ((uint16_t)((i32) & 0xFFFF))
 #define FVI_HIWORD(i32) ((uint16_t)(((uint32_t)(i32) >> 16) & 0xFFFF))
 
+static const WCHAR empty_string[1] = { 0 };
+
 static const char* errmsgs[] = {
   "",
   "Invalid fvi_t",
@@ -65,33 +67,60 @@ const char* fvi_err(fvi_result code) {
 }
 
 fvi_t fvi_init(const uint16_t* file_name) {
+  fvi_t info =
+    (fvi_t) malloc(sizeof(fvi_s));
+  if (info == NULL) return NULL;
+  ZeroMemory(info, sizeof(fvi_s));
+
+  HRESULT hr;
+  size_t len = 0;
+  hr = StringCchLengthW(file_name, STRSAFE_MAX_CCH, &len);
+  if (FAILED(hr)) {
+    return info;
+  }
+  uint16_t* copied_file_name =
+    (uint16_t*) malloc(sizeof(uint16_t) * (len + 1));  // NOLINT
+  if (copied_file_name == NULL) {
+    return info;
+  }
+  hr = StringCchCopyW(copied_file_name, len + 1, file_name);
+  if (FAILED(hr)) {
+    free(copied_file_name);
+    return info;
+  }
+  info->file_name = copied_file_name;
+
   DWORD handle;
   DWORD datasize = GetFileVersionInfoSizeW((LPCWSTR) file_name, &handle);
 
-  if (datasize <= 0) return NULL;
+  if (datasize <= 0) return info;
 
   void* block = malloc(datasize);
-  if (!block) return NULL;
+  if (!block) return info;
 
   if (!GetFileVersionInfoW(file_name, handle, datasize, block)) {
     free(block);
-    return NULL;
+    return info;
   }
+  info->block = block;
 
   VS_FIXEDFILEINFO *ffi = NULL;
   UINT ffi_size = 0;
   VerQueryValueW(block, L"\\", (LPVOID*) &ffi, &ffi_size);  // NOLINT
+  info->ffi = ffi;
+  info->ffi_size = ffi_size;
 
   translation_s* trans = NULL;
   UINT trans_size = 0;
   VerQueryValueW(block, L"\\VarFileInfo\\Translation", (LPVOID*) &trans, &trans_size);  // NOLINT
+  info->trans = trans;
+  info->trans_size = trans_size;
 
   DWORD lang_count = 0;
   WCHAR* lang_buf = (WCHAR*) malloc(128 * sizeof(WCHAR));  // NOLINT
   ZeroMemory(lang_buf, 128 * sizeof(WCHAR));
   if (lang_buf == NULL) {
-    free(block);
-    return NULL;
+    return info;
   }
   if (trans == NULL) {
     lang_count = VerLanguageNameW(0x0409, lang_buf, 128);
@@ -102,39 +131,6 @@ fvi_t fvi_init(const uint16_t* file_name) {
       lang_count = VerLanguageNameW(lang & 0xFFFF, lang_buf, 128);
     }
   }
-
-  HRESULT hr;
-  size_t len = 0;
-  hr = StringCchLengthW(file_name, STRSAFE_MAX_CCH, &len);
-  if (FAILED(hr)) {
-    free(block);
-    free(lang_buf);
-    return NULL;
-  }
-  uint16_t* copied_file_name =
-    (uint16_t*) malloc(sizeof(uint16_t) * (len + 1));  // NOLINT
-  if (copied_file_name == NULL) {
-    free(block);
-    free(lang_buf);
-    return NULL;
-  }
-  hr = StringCchCopyW(copied_file_name, len + 1, file_name);
-  if (FAILED(hr)) {
-    free(copied_file_name);
-    free(block);
-    free(lang_buf);
-    return NULL;
-  }
-
-  fvi_t info =
-    (fvi_t) malloc(sizeof(fvi_s));
-  if (info == NULL) return NULL;
-  info->block = block;
-  info->file_name = copied_file_name;
-  info->ffi = ffi;
-  info->ffi_size = ffi_size;
-  info->trans = trans;
-  info->trans_size = trans_size;
   info->lang_buf = lang_buf;
   info->lang_count = lang_count;
 
@@ -150,96 +146,101 @@ void fvi_free(fvi_t info) {
   }
 }
 
-#define FVI_FFI_RETURN(ret) \
+#define FVI_FFI_RETURN(ret, default) \
   do { \
-    if (info == NULL) return fvi_invalid_type; \
     if (result == NULL) return fvi_invalid_result; \
-    if (info->ffi) { \
+    if (!info || !info->ffi) { \
+      *result = (default); \
+    } else { \
       *result = (ret); \
-      return fvi_ok; \
     } \
-    return fvi_ffi_not_found; \
+    return fvi_ok; \
   } while (0)
 
 fvi_result fvi_file_major_part(fvi_t info, uint16_t* result) {
-  FVI_FFI_RETURN(FVI_HIWORD(info->ffi->dwFileVersionMS));
+  FVI_FFI_RETURN(FVI_HIWORD(info->ffi->dwFileVersionMS), 0);
 }
 
 fvi_result fvi_file_minor_part(fvi_t info, uint16_t* result) {
-  FVI_FFI_RETURN(FVI_LOWORD(info->ffi->dwFileVersionMS));
+  FVI_FFI_RETURN(FVI_LOWORD(info->ffi->dwFileVersionMS), 0);
 }
 
 fvi_result fvi_file_build_part(fvi_t info, uint16_t* result) {
-  FVI_FFI_RETURN(FVI_HIWORD(info->ffi->dwFileVersionLS));
+  FVI_FFI_RETURN(FVI_HIWORD(info->ffi->dwFileVersionLS), 0);
 }
 
 fvi_result fvi_file_private_part(fvi_t info, uint16_t* result) {
-  FVI_FFI_RETURN(FVI_LOWORD(info->ffi->dwFileVersionLS));
+  FVI_FFI_RETURN(FVI_LOWORD(info->ffi->dwFileVersionLS), 0);
 }
 
 fvi_result fvi_product_major_part(fvi_t info, uint16_t* result) {
-  FVI_FFI_RETURN(FVI_HIWORD(info->ffi->dwProductVersionMS));
+  FVI_FFI_RETURN(FVI_HIWORD(info->ffi->dwProductVersionMS), 0);
 }
 
 fvi_result fvi_product_minor_part(fvi_t info, uint16_t* result) {
-  FVI_FFI_RETURN(FVI_LOWORD(info->ffi->dwProductVersionMS));
+  FVI_FFI_RETURN(FVI_LOWORD(info->ffi->dwProductVersionMS), 0);
 }
 
 fvi_result fvi_product_build_part(fvi_t info, uint16_t* result) {
-  FVI_FFI_RETURN(FVI_HIWORD(info->ffi->dwProductVersionLS));
+  FVI_FFI_RETURN(FVI_HIWORD(info->ffi->dwProductVersionLS), 0);
 }
 
 fvi_result fvi_product_private_part(fvi_t info, uint16_t* result) {
-  FVI_FFI_RETURN(FVI_LOWORD(info->ffi->dwProductVersionLS));
+  FVI_FFI_RETURN(FVI_LOWORD(info->ffi->dwProductVersionLS), 0);
 }
 
 fvi_result fvi_is_debug(fvi_t info, bool* result) {
-  FVI_FFI_RETURN(((info->ffi->dwFileFlags & info->ffi->dwFileFlagsMask) & VS_FF_DEBUG) != 0);  // NOLINT
+  FVI_FFI_RETURN(((info->ffi->dwFileFlags & info->ffi->dwFileFlagsMask) & VS_FF_DEBUG) != 0, false);  // NOLINT
 }
 
 fvi_result fvi_is_pre_release(fvi_t info, bool* result) {
-  FVI_FFI_RETURN(((info->ffi->dwFileFlags & info->ffi->dwFileFlagsMask) & VS_FF_PRERELEASE) != 0);  // NOLINT
+  FVI_FFI_RETURN(((info->ffi->dwFileFlags & info->ffi->dwFileFlagsMask) & VS_FF_PRERELEASE) != 0, false);  // NOLINT
 }
 
 fvi_result fvi_is_patched(fvi_t info, bool* result) {
-  FVI_FFI_RETURN(((info->ffi->dwFileFlags & info->ffi->dwFileFlagsMask) & VS_FF_PATCHED) != 0);  // NOLINT
+  FVI_FFI_RETURN(((info->ffi->dwFileFlags & info->ffi->dwFileFlagsMask) & VS_FF_PATCHED) != 0, false);  // NOLINT
 }
 
 fvi_result fvi_is_private_build(fvi_t info, bool* result) {
-  FVI_FFI_RETURN(((info->ffi->dwFileFlags & info->ffi->dwFileFlagsMask) & VS_FF_PRIVATEBUILD) != 0);  // NOLINT
+  FVI_FFI_RETURN(((info->ffi->dwFileFlags & info->ffi->dwFileFlagsMask) & VS_FF_PRIVATEBUILD) != 0, false);  // NOLINT
 }
 
 fvi_result fvi_is_special_build(fvi_t info, bool* result) {
-  FVI_FFI_RETURN(((info->ffi->dwFileFlags & info->ffi->dwFileFlagsMask) & VS_FF_SPECIALBUILD) != 0);  // NOLINT
+  FVI_FFI_RETURN(((info->ffi->dwFileFlags & info->ffi->dwFileFlagsMask) & VS_FF_SPECIALBUILD) != 0, false);  // NOLINT
 }
 
 fvi_result fvi_language(fvi_t info, const uint16_t** result) {
-  if (info == NULL) return fvi_invalid_type;
   if (result == NULL) return fvi_invalid_result;
-  *result = info->lang_buf;
+  if (info == NULL || info->lang_count == 0) {
+    *result = empty_string;
+  } else {
+    *result = info->lang_buf;
+  }
   return fvi_ok;
 }
 
 fvi_result fvi_file_name(fvi_t info, const uint16_t** result) {
-  if (info == NULL) return fvi_invalid_type;
   if (result == NULL) return fvi_invalid_result;
+  if (info == NULL) return fvi_invalid_type;
   *result = info->file_name;
   return fvi_ok;
 }
-
-static const WCHAR empty_string[1] = { 0 };
 
 fvi_result fvi_string_file_info(fvi_t info,
                                 uint32_t id,
                                 const uint16_t** result,
                                 uint32_t* len) {
-  if (info == NULL) return fvi_invalid_type;
   if (id > 11 || result == NULL || len == NULL) return fvi_invalid_result;
+  if (info == NULL) {
+    *result = empty_string;
+    *len = 0;
+    return fvi_ok;
+  }
 
   uint32_t lang_count = 0;
   if (info->trans == NULL) {
     *result = empty_string;
-    *len = 1;
+    *len = 0;
     return fvi_ok;
   }
   if (info->trans_size == 0) return fvi_trans_not_found;

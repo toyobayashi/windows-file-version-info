@@ -158,18 +158,10 @@ UTF16_GETTER(file_name)
 UTF16_GETTER(language)
 
 static napi_value
-get_version_info_static(napi_env env, napi_callback_info info) {
+get_version_info_internal(napi_env env, napi_callback_info info) {
   napi_value file_name;
   size_t argc = 1;
   NAPI_CALL(env, napi_get_cb_info(env, info, &argc, &file_name, NULL, NULL));
-
-  napi_valuetype type;
-  NAPI_CALL(env, napi_typeof(env, file_name, &type));
-
-  if (type != napi_string) {
-    napi_throw_type_error(env, NULL, "Expect path string");
-    return NULL;
-  }
 
   size_t len_exclude_null = 0;
   NAPI_CALL(env, napi_get_value_string_utf16(env,
@@ -181,18 +173,30 @@ get_version_info_static(napi_env env, napi_callback_info info) {
   size_t len = (len_exclude_null + 1) * sizeof(char16_t);
   char16_t* filename = (char16_t*) malloc(len);  // NOLINT
   if (!filename) return NULL;
-  napi_get_value_string_utf16(env,
-                              file_name,
-                              filename,
-                              len,
-                              &len_exclude_null);
+  napi_status s = napi_get_value_string_utf16(env,
+                                              file_name,
+                                              filename,
+                                              len,
+                                              &len_exclude_null);
+
+  if (s != napi_ok) {
+    const napi_extended_error_info* error_info = NULL;
+    napi_get_last_error_info((env), &error_info);
+    const char* err_message = error_info->error_message;
+    bool is_pending;
+    napi_is_exception_pending(env, &is_pending);
+    if (!is_pending) {
+      const char* message = (err_message == NULL)
+          ? "empty error message"
+          : err_message;
+      free(filename);
+      napi_throw_error(env, NULL, message);
+      return NULL;
+    }
+  }
 
   fvi_t file_version_info = fvi_init(filename);
   free(filename);
-  if (file_version_info == NULL) {
-    napi_throw_error(env, NULL, "Open file failed");
-    return NULL;
-  }
 
   napi_ref cons_ref;
   napi_value constructor;
@@ -310,18 +314,18 @@ napi_value create_addon(napi_env env, napi_value exports) {
                                    property_count,
                                    prototype,
                                    &constructor));
-  napi_value js_get_version_info_static;
+  napi_value js_get_version_info_internal;
   NAPI_CALL(env, napi_create_function(env,
-                                      "getVersionInfo",
+                                      "getVersionInfoInternal",
                                       NAPI_AUTO_LENGTH,
-                                      get_version_info_static,
+                                      get_version_info_internal,
                                       NULL,
-                                      &js_get_version_info_static));
+                                      &js_get_version_info_internal));
 
   NAPI_CALL(env, napi_set_named_property(env,
-                                         constructor,
-                                         "getVersionInfo",
-                                         js_get_version_info_static));
+                                         exports,
+                                         "getVersionInfoInternal",
+                                         js_get_version_info_internal));
 
   napi_ref cons_ref;
   NAPI_CALL(env, napi_create_reference(env, constructor, 1, &cons_ref));

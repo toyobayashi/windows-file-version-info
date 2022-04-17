@@ -1,7 +1,22 @@
 const { EOL } = require('os')
+const { existsSync } = require('fs')
 const mod = require('./dist/fvi.node')
 
-const { FileVersionInfo } = mod
+const { FileVersionInfo, getVersionInfoInternal } = mod
+
+Object.defineProperty(FileVersionInfo, 'getVersionInfo', {
+  configurable: true,
+  writable: true,
+  value (fileName) {
+    if (typeof fileName !== 'string') {
+      throw new TypeError('Expect string path')
+    }
+    if (!existsSync(fileName)) {
+      throw new Error('File is not found: ' + fileName)
+    }
+    return getVersionInfoInternal(fileName)
+  }
+})
 
 Object.defineProperty(FileVersionInfo.prototype, 'toString', {
   configurable: true,
