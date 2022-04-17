@@ -12,25 +12,15 @@
 #include <string.h>
 #include "file_version_info.h"
 
-static const WCHAR* string_file_info_keys[] = {
-  L"\\StringFileInfo\\%04x%04x\\Comments",
-  L"\\StringFileInfo\\%04x%04x\\CompanyName",
-  L"\\StringFileInfo\\%04x%04x\\FileDescription",
-  L"\\StringFileInfo\\%04x%04x\\FileVersion",
-  L"\\StringFileInfo\\%04x%04x\\InternalName",
-  L"\\StringFileInfo\\%04x%04x\\LegalCopyright",
-  L"\\StringFileInfo\\%04x%04x\\LegalTrademarks",
-  L"\\StringFileInfo\\%04x%04x\\OriginalFilename",
-  L"\\StringFileInfo\\%04x%04x\\PrivateBuild",
-  L"\\StringFileInfo\\%04x%04x\\ProductName",
-  L"\\StringFileInfo\\%04x%04x\\ProductVersion",
-  L"\\StringFileInfo\\%04x%04x\\SpecialBuild"
-};
-
 typedef struct {
-  WORD wLanguage;
-  WORD wCodePage;
+  uint16_t wLanguage;
+  uint16_t wCodePage;
 } translation_s;
+
+#ifdef _WIN32
+
+#define FVI_LOWORD(i32) ((uint16_t)((i32) & 0xFFFF))
+#define FVI_HIWORD(i32) ((uint16_t)(((uint32_t)(i32) >> 16) & 0xFFFF))
 
 struct fvi {
   uint16_t* file_name;
@@ -45,12 +35,22 @@ struct fvi {
 
 typedef struct fvi fvi_s;
 
-#ifdef _WIN32
-
-#define FVI_LOWORD(i32) ((uint16_t)((i32) & 0xFFFF))
-#define FVI_HIWORD(i32) ((uint16_t)(((uint32_t)(i32) >> 16) & 0xFFFF))
-
 static const WCHAR empty_string[1] = { 0 };
+
+static const WCHAR* string_file_info_keys[] = {
+  L"\\StringFileInfo\\%04x%04x\\Comments",
+  L"\\StringFileInfo\\%04x%04x\\CompanyName",
+  L"\\StringFileInfo\\%04x%04x\\FileDescription",
+  L"\\StringFileInfo\\%04x%04x\\FileVersion",
+  L"\\StringFileInfo\\%04x%04x\\InternalName",
+  L"\\StringFileInfo\\%04x%04x\\LegalCopyright",
+  L"\\StringFileInfo\\%04x%04x\\LegalTrademarks",
+  L"\\StringFileInfo\\%04x%04x\\OriginalFilename",
+  L"\\StringFileInfo\\%04x%04x\\PrivateBuild",
+  L"\\StringFileInfo\\%04x%04x\\ProductName",
+  L"\\StringFileInfo\\%04x%04x\\ProductVersion",
+  L"\\StringFileInfo\\%04x%04x\\SpecialBuild"
+};
 
 static const char* errmsgs[] = {
   "",
