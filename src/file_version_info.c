@@ -24,7 +24,7 @@ static const char* errmsgs[] = {
   "VS_FIXEDFILEINFO is NULL",
   "translation_s is NULL",
   "Windows API Error",
-  "Unsupport platform",
+  "Unsupported platform",
 };
 
 const char* fvi_err(fvi_result code) {

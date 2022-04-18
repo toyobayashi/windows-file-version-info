@@ -1,14 +1,4 @@
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <Windows.h>
-#include <winver.h>
-#include <strsafe.h>
-#endif
-
 #include <stdlib.h>
-#include <string.h>
 
 #include "addon.h"
 #include "file_version_info.h"
@@ -32,46 +22,74 @@
     }                                                             \
   } while (0)
 
-static void finalize_instance(napi_env env,
-                              void* finalize_data,
-                              void* finalize_hint) {
-  napi_delete_reference(env, (napi_ref) finalize_data);
-}
-
-static void finalize_obj(napi_env env,
-                         void* finalize_data,
-                         void* finalize_hint) {
-  fvi_free((fvi_t) finalize_data);
-}
-
-static napi_value js_fvi_constructor(napi_env env, napi_callback_info info) {
-  napi_value external;
-  void* data = NULL;
-  napi_value this_arg;
-  size_t argc = 1;
-  NAPI_CALL(env, napi_get_cb_info(
-    env, info, &argc, &external, &this_arg, NULL));
-  NAPI_CALL(env, napi_get_value_external(env, external, &data));
-  NAPI_CALL(env, napi_wrap(env, this_arg, data, finalize_obj, NULL, NULL));
-  return this_arg;
-}
-
-#define STRING_TABLE_GETTER(fname, id) \
-  static napi_value getter_##fname(napi_env env, napi_callback_info info) { \
-    fvi_t data; \
-    napi_value this_arg; \
+#define STRING_TABLE_GETTER(fname, id)                                        \
+  static napi_value getter_##fname(napi_env env, napi_callback_info info) {   \
+    fvi_t data;                                                               \
+    napi_value this_arg;                                                      \
     NAPI_CALL(env, napi_get_cb_info(env, info, NULL, NULL, &this_arg, NULL)); \
-    NAPI_CALL(env, napi_unwrap(env, this_arg, &data)); \
-    char16_t* res = NULL; \
-    uint32_t res_size = 0; \
-    fvi_result r = fvi_string_file_info(data, (id), &res, &res_size); \
-    if (r != fvi_ok) { \
-      napi_throw_error(env, NULL, fvi_err(r)); \
-      return NULL; \
-    } \
-    napi_value ret; \
-    NAPI_CALL(env, napi_create_string_utf16(env, res, res_size, &ret)); \
-    return ret; \
+    NAPI_CALL(env, napi_unwrap(env, this_arg, &data));                        \
+    char16_t* res = NULL;                                                     \
+    uint32_t res_size = 0;                                                    \
+    fvi_result r = fvi_string_file_info(data, (id), &res, &res_size);         \
+    if (r != fvi_ok) {                                                        \
+      napi_throw_error(env, NULL, fvi_err(r));                                \
+      return NULL;                                                            \
+    }                                                                         \
+    napi_value ret;                                                           \
+    NAPI_CALL(env, napi_create_string_utf16(env, res, res_size, &ret));       \
+    return ret;                                                               \
+  }
+
+#define UINT_GETTER(fname)                                                    \
+  static napi_value getter_##fname(napi_env env, napi_callback_info info) {   \
+    fvi_t data;                                                               \
+    napi_value this_arg;                                                      \
+    NAPI_CALL(env, napi_get_cb_info(env, info, NULL, NULL, &this_arg, NULL)); \
+    NAPI_CALL(env, napi_unwrap(env, this_arg, &data));                        \
+    uint16_t res = 0;                                                         \
+    fvi_result r = fvi_##fname(data, &res);                                   \
+    if (r != fvi_ok) {                                                        \
+      napi_throw_error(env, NULL, fvi_err(r));                                \
+      return NULL;                                                            \
+    }                                                                         \
+    napi_value ret;                                                           \
+    NAPI_CALL(env, napi_create_uint32(env, res, &ret));                       \
+    return ret;                                                               \
+  }
+
+#define BOOL_GETTER(fname)                                                    \
+  static napi_value getter_##fname(napi_env env, napi_callback_info info) {   \
+    fvi_t data;                                                               \
+    napi_value this_arg;                                                      \
+    NAPI_CALL(env, napi_get_cb_info(env, info, NULL, NULL, &this_arg, NULL)); \
+    NAPI_CALL(env, napi_unwrap(env, this_arg, &data));                        \
+    bool res = false;                                                         \
+    fvi_result r = fvi_##fname(data, &res);                                   \
+    if (r != fvi_ok) {                                                        \
+      napi_throw_error(env, NULL, fvi_err(r));                                \
+      return NULL;                                                            \
+    }                                                                         \
+    napi_value ret;                                                           \
+    NAPI_CALL(env, napi_get_boolean(env, res, &ret));                         \
+    return ret;                                                               \
+  }
+
+#define UTF16_GETTER(fname)                                                   \
+  static napi_value getter_##fname(napi_env env, napi_callback_info info) {   \
+    fvi_t data;                                                               \
+    napi_value this_arg;                                                      \
+    NAPI_CALL(env, napi_get_cb_info(env, info, NULL, NULL, &this_arg, NULL)); \
+    NAPI_CALL(env, napi_unwrap(env, this_arg, &data));                        \
+    const uint16_t* res = NULL;                                               \
+    fvi_result r = fvi_##fname(data, &res);                                   \
+    if (r != fvi_ok) {                                                        \
+      napi_throw_error(env, NULL, fvi_err(r));                                \
+      return NULL;                                                            \
+    }                                                                         \
+    napi_value ret;                                                           \
+    NAPI_CALL(env, napi_create_string_utf16(                                  \
+      env, res, NAPI_AUTO_LENGTH, &ret));                                     \
+    return ret;                                                               \
   }
 
 STRING_TABLE_GETTER(comments, FVI_SFI_COMMENTS)
@@ -87,23 +105,6 @@ STRING_TABLE_GETTER(product_name, FVI_SFI_PRODUCTNAME)
 STRING_TABLE_GETTER(product_version, FVI_SFI_PRODUCTVERSION)
 STRING_TABLE_GETTER(special_build, FVI_SFI_SPECIALBUILD)
 
-#define UINT_GETTER(fname) \
-  static napi_value getter_##fname(napi_env env, napi_callback_info info) { \
-    fvi_t data; \
-    napi_value this_arg; \
-    NAPI_CALL(env, napi_get_cb_info(env, info, NULL, NULL, &this_arg, NULL)); \
-    NAPI_CALL(env, napi_unwrap(env, this_arg, &data)); \
-    uint16_t res = 0; \
-    fvi_result r = fvi_##fname(data, &res); \
-    if (r != fvi_ok) { \
-      napi_throw_error(env, NULL, fvi_err(r)); \
-      return NULL; \
-    } \
-    napi_value ret; \
-    NAPI_CALL(env, napi_create_uint32(env, res, &ret)); \
-    return ret; \
-  }
-
 UINT_GETTER(file_major_part)
 UINT_GETTER(file_minor_part)
 UINT_GETTER(file_build_part)
@@ -113,49 +114,81 @@ UINT_GETTER(product_minor_part)
 UINT_GETTER(product_build_part)
 UINT_GETTER(product_private_part)
 
-#define BOOL_GETTER(fname) \
-  static napi_value getter_##fname(napi_env env, napi_callback_info info) { \
-    fvi_t data; \
-    napi_value this_arg; \
-    NAPI_CALL(env, napi_get_cb_info(env, info, NULL, NULL, &this_arg, NULL)); \
-    NAPI_CALL(env, napi_unwrap(env, this_arg, &data)); \
-    bool res = false; \
-    fvi_result r = fvi_##fname(data, &res); \
-    if (r != fvi_ok) { \
-      napi_throw_error(env, NULL, fvi_err(r)); \
-      return NULL; \
-    } \
-    napi_value ret; \
-    NAPI_CALL(env, napi_get_boolean(env, res, &ret)); \
-    return ret; \
-  }
-
 BOOL_GETTER(is_debug)
 BOOL_GETTER(is_pre_release)
 BOOL_GETTER(is_patched)
 BOOL_GETTER(is_private_build)
 BOOL_GETTER(is_special_build)
 
-#define UTF16_GETTER(fname) \
-  static napi_value getter_##fname(napi_env env, napi_callback_info info) { \
-    fvi_t data; \
-    napi_value this_arg; \
-    NAPI_CALL(env, napi_get_cb_info(env, info, NULL, NULL, &this_arg, NULL)); \
-    NAPI_CALL(env, napi_unwrap(env, this_arg, &data)); \
-    const uint16_t* res = NULL; \
-    fvi_result r = fvi_##fname(data, &res); \
-    if (r != fvi_ok) { \
-      napi_throw_error(env, NULL, fvi_err(r)); \
-      return NULL; \
-    } \
-    napi_value ret; \
-    NAPI_CALL(env, napi_create_string_utf16( \
-      env, res, NAPI_AUTO_LENGTH, &ret)); \
-    return ret; \
-  }
-
 UTF16_GETTER(file_name)
 UTF16_GETTER(language)
+
+#define DECLARE_NAPI_GETTER(name, fname) \
+  { (name), NULL, NULL, (getter_##fname), NULL, NULL, napi_configurable, NULL }
+
+#define DEFINE_PROPERTIES(var) \
+  napi_property_descriptor var[] = {                                 \
+    DECLARE_NAPI_GETTER("comments", comments),                       \
+    DECLARE_NAPI_GETTER("companyName", company_name),                \
+    DECLARE_NAPI_GETTER("fileDescription", file_description),        \
+    DECLARE_NAPI_GETTER("fileVersion", file_version),                \
+    DECLARE_NAPI_GETTER("internalName", internal_name),              \
+    DECLARE_NAPI_GETTER("legalCopyright", legal_copyright),          \
+    DECLARE_NAPI_GETTER("legalTrademarks", legal_trademarks),        \
+    DECLARE_NAPI_GETTER("originalFilename", original_filename),      \
+    DECLARE_NAPI_GETTER("privateBuild", private_build),              \
+    DECLARE_NAPI_GETTER("productName", product_name),                \
+    DECLARE_NAPI_GETTER("productVersion", product_version),          \
+    DECLARE_NAPI_GETTER("specialBuild", special_build),              \
+    DECLARE_NAPI_GETTER("fileMajorPart", file_major_part),           \
+    DECLARE_NAPI_GETTER("fileMinorPart", file_minor_part),           \
+    DECLARE_NAPI_GETTER("fileBuildPart", file_build_part),           \
+    DECLARE_NAPI_GETTER("filePrivatePart", file_private_part),       \
+    DECLARE_NAPI_GETTER("productMajorPart", product_major_part),     \
+    DECLARE_NAPI_GETTER("productMinorPart", product_minor_part),     \
+    DECLARE_NAPI_GETTER("productBuildPart", product_build_part),     \
+    DECLARE_NAPI_GETTER("productPrivatePart", product_private_part), \
+    DECLARE_NAPI_GETTER("isDebug", is_debug),                        \
+    DECLARE_NAPI_GETTER("isPreRelease", is_pre_release),             \
+    DECLARE_NAPI_GETTER("isPatched", is_patched),                    \
+    DECLARE_NAPI_GETTER("isPrivateBuild", is_private_build),         \
+    DECLARE_NAPI_GETTER("isSpecialBuild", is_special_build),         \
+    DECLARE_NAPI_GETTER("fileName", file_name),                      \
+    DECLARE_NAPI_GETTER("language", language)                        \
+  }
+
+static void finalize_instance(napi_env env,
+                              void* finalize_data,
+                              void* finalize_hint) {
+  napi_delete_reference(env, (napi_ref) finalize_data);
+}
+
+static void finalize_obj(napi_env env,
+                         void* finalize_data,
+                         void* finalize_hint) {
+  fvi_free((fvi_t) finalize_data);
+}
+
+static napi_value js_fvi_constructor(napi_env env, napi_callback_info info) {
+  napi_value new_target = NULL;
+  NAPI_CALL(env, napi_get_new_target(env, info, &new_target));
+  if (new_target == NULL) {
+    NAPI_CALL(env, napi_throw_type_error(
+      env, NULL, "Constructor FileVersionInfo requires 'new'"));
+    return NULL;
+  }
+
+  napi_value external;
+  napi_value this_arg;
+  size_t argc = 1;
+  NAPI_CALL(env, napi_get_cb_info(
+    env, info, &argc, &external, &this_arg, NULL));
+
+  void* data = NULL;
+  NAPI_CALL(env, napi_get_value_external(env, external, &data));
+  NAPI_CALL(env, napi_wrap(env, this_arg, data, finalize_obj, NULL, NULL));
+  return this_arg;
+}
 
 static napi_value
 get_version_info_internal(napi_env env, napi_callback_info info) {
@@ -210,6 +243,21 @@ get_version_info_internal(napi_env env, napi_callback_info info) {
   return ret;
 }
 
+#define NAPI_EXPORT_FUNCTION(env, exports, name, fn)        \
+  do {                                                      \
+    napi_value js_##fn;                                     \
+    NAPI_CALL((env), napi_create_function((env),            \
+                                          (name),           \
+                                          NAPI_AUTO_LENGTH, \
+                                          (fn),             \
+                                          NULL,             \
+                                          &js_##fn));       \
+    NAPI_CALL((env), napi_set_named_property((env),         \
+                                             (exports),     \
+                                             (name),        \
+                                             js_##fn));     \
+  } while (0)
+
 napi_value create_addon(napi_env env, napi_value exports) {
   napi_value true_value;
   NAPI_CALL(env, napi_get_boolean(env, true, &true_value));
@@ -218,124 +266,24 @@ napi_value create_addon(napi_env env, napi_value exports) {
   };
   NAPI_CALL(env, napi_define_properties(env, exports, 1, &properties));
 
-  napi_property_descriptor prototype[] = {
-    { "comments", NULL,
-      NULL, getter_comments, NULL, NULL,
-      napi_configurable, NULL },
-    { "companyName", NULL,
-      NULL, getter_company_name, NULL, NULL,
-      napi_configurable, NULL },
-    { "fileDescription", NULL,
-      NULL, getter_file_description, NULL, NULL,
-      napi_configurable, NULL },
-    { "fileVersion", NULL,
-      NULL, getter_file_version, NULL, NULL,
-      napi_configurable, NULL },
-    { "internalName", NULL,
-      NULL, getter_internal_name, NULL, NULL,
-      napi_configurable, NULL },
-    { "legalCopyright", NULL,
-      NULL, getter_legal_copyright, NULL, NULL,
-      napi_configurable, NULL },
-    { "legalTrademarks", NULL,
-      NULL, getter_legal_trademarks, NULL, NULL,
-      napi_configurable, NULL },
-    { "originalFilename", NULL,
-      NULL, getter_original_filename, NULL, NULL,
-      napi_configurable, NULL },
-    { "privateBuild", NULL,
-      NULL, getter_private_build, NULL, NULL,
-      napi_configurable, NULL },
-    { "productName", NULL,
-      NULL, getter_product_name, NULL, NULL,
-      napi_configurable, NULL },
-    { "productVersion", NULL,
-      NULL, getter_product_version, NULL, NULL,
-      napi_configurable, NULL },
-    { "specialBuild", NULL,
-      NULL, getter_special_build, NULL, NULL,
-      napi_configurable, NULL },
-
-    { "fileMajorPart", NULL,
-      NULL, getter_file_major_part, NULL, NULL,
-      napi_configurable, NULL },
-    { "fileMinorPart", NULL,
-      NULL, getter_file_minor_part, NULL, NULL,
-      napi_configurable, NULL },
-    { "fileBuildPart", NULL,
-      NULL, getter_file_build_part, NULL, NULL,
-      napi_configurable, NULL },
-    { "filePrivatePart", NULL,
-      NULL, getter_file_private_part, NULL, NULL,
-      napi_configurable, NULL },
-    { "productMajorPart", NULL,
-      NULL, getter_product_major_part, NULL, NULL,
-      napi_configurable, NULL },
-    { "productMinorPart", NULL,
-      NULL, getter_product_minor_part, NULL, NULL,
-      napi_configurable, NULL },
-    { "productBuildPart", NULL,
-      NULL, getter_product_build_part, NULL, NULL,
-      napi_configurable, NULL },
-    { "productPrivatePart", NULL,
-      NULL, getter_product_private_part, NULL, NULL,
-      napi_configurable, NULL },
-
-    { "isDebug", NULL,
-      NULL, getter_is_debug, NULL, NULL,
-      napi_configurable, NULL },
-    { "isPreRelease", NULL,
-      NULL, getter_is_pre_release, NULL, NULL,
-      napi_configurable, NULL },
-    { "isPatched", NULL,
-      NULL, getter_is_patched, NULL, NULL,
-      napi_configurable, NULL },
-    { "isPrivateBuild", NULL,
-      NULL, getter_is_private_build, NULL, NULL,
-      napi_configurable, NULL },
-    { "isSpecialBuild", NULL,
-      NULL, getter_is_special_build, NULL, NULL,
-      napi_configurable, NULL },
-
-    { "fileName", NULL,
-      NULL, getter_file_name, NULL, NULL,
-      napi_configurable, NULL },
-    { "language", NULL,
-      NULL, getter_language, NULL, NULL,
-      napi_configurable, NULL }
-  };
-  napi_value constructor;
+  DEFINE_PROPERTIES(prototype);
   size_t property_count = sizeof(prototype) / sizeof(napi_property_descriptor);
-  NAPI_CALL(env, napi_define_class(env,
-                                   "FileVersionInfo",
-                                   NAPI_AUTO_LENGTH,
-                                   js_fvi_constructor,
-                                   NULL,
-                                   property_count,
-                                   prototype,
-                                   &constructor));
-  napi_value js_get_version_info_internal;
-  NAPI_CALL(env, napi_create_function(env,
-                                      "getVersionInfoInternal",
-                                      NAPI_AUTO_LENGTH,
-                                      get_version_info_internal,
-                                      NULL,
-                                      &js_get_version_info_internal));
-
-  NAPI_CALL(env, napi_set_named_property(env,
-                                         exports,
-                                         "getVersionInfoInternal",
-                                         js_get_version_info_internal));
+  napi_value constructor;
+  NAPI_CALL(env, napi_define_class(
+    env, "FileVersionInfo", NAPI_AUTO_LENGTH, js_fvi_constructor, NULL,
+    property_count, prototype, &constructor));
 
   napi_ref cons_ref;
   NAPI_CALL(env, napi_create_reference(env, constructor, 1, &cons_ref));
   NAPI_CALL(env, napi_set_instance_data(env,
     cons_ref, finalize_instance, NULL));
-
   NAPI_CALL(env, napi_set_named_property(env,
                                          exports,
                                          "FileVersionInfo",
                                          constructor));
+
+  NAPI_EXPORT_FUNCTION(env, exports,
+    "getVersionInfoInternal", get_version_info_internal);
 
   return exports;
 }
